@@ -29,6 +29,8 @@ class ConfigResponse(BaseModel):
     display_width: int = 480
     display_height: int = 320
     font_size: int = 28
+    bg_color: str = "#000000"
+    text_color: str = "#4ade80"
 
 
 class StatusResponse(BaseModel):

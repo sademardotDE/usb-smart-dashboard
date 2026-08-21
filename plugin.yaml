@@ -55,6 +55,14 @@ config_schema:
     type: number
     default: 28
     description: "Schriftgröße für Textzeilen"
+  bg_color:
+    type: string
+    default: "#000000"
+    description: "Hintergrundfarbe als Hex (z.B. #000000)"
+  text_color:
+    type: string
+    default: "#4ade80"
+    description: "Textfarbe als Hex (z.B. #4ade80)"
 
 lifecycle:
   hooks:

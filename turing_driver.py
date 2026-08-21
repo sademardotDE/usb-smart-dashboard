@@ -95,6 +95,23 @@ def _autodetect_port() -> Optional[str]:
     return None
 
 
+def _hex_to_rgb(hex_str: str, fallback: tuple = (0, 0, 0)) -> tuple:
+    """Parse a hex color string like '#4ade80' to (r, g, b). Returns fallback on error."""
+    s = hex_str.strip().lstrip("#")
+    if len(s) != 6:
+        return fallback
+    try:
+        return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+    except (ValueError, IndexError):
+        return fallback
+
+
+# -- default colors -----------------------------------------------------
+
+DEFAULT_BG = "#000000"
+DEFAULT_TEXT = "#4ade80"
+
+
 def _image_to_rgb565_le(image) -> bytes:
     """RGB(A) PIL image -> little-endian RGB565 byte stream."""
     if image.mode not in ("RGB", "RGBA"):
@@ -142,6 +159,8 @@ class TuringDriver:
         display_width: int = 480,
         display_height: int = 320,
         font_size: int = 28,
+        bg_color: str = DEFAULT_BG,
+        text_color: str = DEFAULT_TEXT,
     ) -> None:
         self._port = port or _autodetect_port() or ""
         self._baudrate = baudrate
@@ -149,6 +168,8 @@ class TuringDriver:
         self._width = display_width
         self._height = display_height
         self._font_size = font_size
+        self._bg = _hex_to_rgb(bg_color, (0, 0, 0))
+        self._text = _hex_to_rgb(text_color, (74, 222, 128))
         self._ser = None
         self._renderer = False
         self._last_open = 0.0
@@ -272,7 +293,7 @@ class TuringDriver:
                 return
         w, h = self._width, self._height
         try:
-            image = Image.new("RGB", (w, h), (5, 5, 10))
+            image = Image.new("RGB", (w, h), self._bg)
             draw = ImageDraw.Draw(image)
             font = self._font()
             step = self._font_size + 8
@@ -285,7 +306,7 @@ class TuringDriver:
                     while text and draw.textlength(text + "…", font=font) > w - 16:
                         text = text[:-1]
                     text += "…"
-                draw.text((8, y), text, fill=(225, 225, 225), font=font)
+                draw.text((8, y), text, fill=self._text, font=font)
                 y += step
 
             rgb565 = _image_to_rgb565_le(image)
@@ -328,4 +349,6 @@ def build_turing_driver(config_get) -> TuringDriver:
         display_width=int(config_get("display_width", 480)),
         display_height=int(config_get("display_height", 320)),
         font_size=int(config_get("font_size", 28)),
+        bg_color=str(config_get("bg_color", DEFAULT_BG)),
+        text_color=str(config_get("text_color", DEFAULT_TEXT)),
     )

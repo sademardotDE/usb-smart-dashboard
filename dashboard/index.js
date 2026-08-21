@@ -44,9 +44,18 @@
     display_width: 480,
     display_height: 320,
     font_size: 28,
+    bg_color: "#000000",
+    text_color: "#4ade80",
   };
 
   var DRIVER_OPTIONS = ["turing", "serial", "file", "auto"];
+
+  var COLOR_PRESETS = [
+    { name: "Terminal-Grün", text: "#4ade80", bg: "#000000" },
+    { name: "Amber", text: "#fbbf24", bg: "#1a1000" },
+    { name: "Weiß", text: "#ffffff", bg: "#000000" },
+    { name: "Blau", text: "#60a5fa", bg: "#0a1929" },
+  ];
 
   var FIELDS = [
     { key: "enabled", label: "Enabled", type: "checkbox" },
@@ -60,6 +69,8 @@
     { key: "display_width", label: "Panel width (px)", type: "number" },
     { key: "display_height", label: "Panel height (px)", type: "number" },
     { key: "font_size", label: "Font size (px)", type: "number" },
+    { key: "bg_color", label: "Hintergrundfarbe", type: "text", help: "Hex-Farbcode (z.B. #000000)" },
+    { key: "text_color", label: "Textfarbe", type: "text", help: "Hex-Farbcode (z.B. #4ade80)" },
   ];
 
   function selectChangeHandler(onChange) {
@@ -207,6 +218,43 @@
     );
   }
 
+  function ColorPresetSection(props) {
+    var draft = props.draft;
+    var setField = props.setField;
+    var currentText = draft.text_color || DEFAULTS.text_color;
+    var currentBg = draft.bg_color || DEFAULTS.bg_color;
+
+    return h("div", { style: { marginBottom: "1rem" } },
+      h("label", { style: { fontSize: "0.85rem", fontWeight: 500, display: "block", marginBottom: "0.5rem" } }, "Farbschema"),
+      h("div", { style: { display: "flex", gap: "0.5rem", flexWrap: "wrap" } },
+        COLOR_PRESETS.map(function (preset) {
+          var isActive = currentText === preset.text && currentBg === preset.bg;
+          return h("button", {
+            key: preset.name,
+            onClick: function () {
+              setField("text_color", preset.text);
+              setField("bg_color", preset.bg);
+            },
+            style: {
+              display: "flex", alignItems: "center", gap: "0.4rem",
+              padding: "0.35rem 0.65rem", borderRadius: "6px", border: isActive ? "2px solid var(--primary, #4ade80)" : "1px solid var(--border, #333)",
+              background: isActive ? "var(--primary/10, rgba(74,222,128,0.1))" : "var(--card, #111)",
+              cursor: "pointer", fontSize: "0.8rem", color: "var(--foreground, #eee)",
+            },
+          },
+            h("span", {
+              style: { display: "inline-block", width: "14px", height: "14px", borderRadius: "3px", border: "1px solid #555", background: preset.text },
+            }),
+            h("span", {
+              style: { display: "inline-block", width: "14px", height: "14px", borderRadius: "3px", border: "1px solid #555", background: preset.bg },
+            }),
+            preset.name,
+          );
+        }),
+      ),
+    );
+  }
+
   function SettingsPanel() {
     var toastApi = useToast();
     var showToast = toastApi.showToast;
@@ -295,6 +343,7 @@
           "Hinweis: Änderungen werden nach Hermes-Neustart aktiv (Gateway/Dashboard neu starten).")
       ),
       h(components.CardContent, null,
+        h(ColorPresetSection, { draft: draft, setField: setField }),
         h("div", { className: "usb-fields" },
           FIELDS.map(function (f) {
             return h(ConfigField, {
