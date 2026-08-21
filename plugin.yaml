@@ -1,5 +1,5 @@
 name: usb-smart-dashboard
-version: 0.2.0
+version: 0.3.0
 description: "Renders live system stats and Hermes agent status on a USB smart display. Runs via plugin hooks and a background render thread — no agent action required."
 author: "@LVT382009"
 repository: "https://github.com/sademardotDE/usb-smart-dashboard"
@@ -55,3 +55,15 @@ config_schema:
     type: number
     default: 28
     description: "Schriftgröße für Textzeilen"
+
+lifecycle:
+  hooks:
+    pre_install: "hooks/pre_install.py"
+    post_install: "hooks/post_install.py"
+    pre_uninstall: "hooks/pre_uninstall.py"
+    post_uninstall: "hooks/post_uninstall.py"
+  requires_root: false
+  systemd_services:
+    - "usb-smart-dashboard.service"
+  udev_rules:
+    - "99-usb-smart-dashboard.rules"
