@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -49,7 +50,7 @@ except ImportError:  # pragma: no cover
     SerialException = OSError  # type: ignore
 
 try:
-    from PIL import Image, ImageDraw  # type: ignore
+    from PIL import Image, ImageDraw, ImageFont  # type: ignore
 
     _HAS_PIL = True
 except ImportError:  # pragma: no cover
@@ -110,6 +111,63 @@ def _hex_to_rgb(hex_str: str, fallback: tuple = (0, 0, 0)) -> tuple:
 
 DEFAULT_BG = "#000000"
 DEFAULT_TEXT = "#4ade80"
+
+# -- font sizes ---------------------------------------------------------
+
+FONT_SIZE_HEADER = 16
+FONT_SIZE_BODY = 22
+
+# -- regex patterns for line detection -----------------------------------
+
+_RE_TIME = re.compile(r"^\d{2}:\d{2}:\d{2}\s")
+_RE_HOST = re.compile(r"\S+@\S+")
+_RE_CPU = re.compile(r"CPU\s+(\d+)%")
+_RE_MEM = re.compile(r"MEM\s+(\d+)M/(\d+)M")
+_RE_LOAD = re.compile(r"LOAD\s+([\d.]+)")
+_RE_TEMP = re.compile(r"(\d+)C")
+_RE_STATUS = re.compile(r"hermes:\s*(.+)")
+
+
+def _parse_cpu(text: str):
+    m = _RE_CPU.search(text)
+    return int(m.group(1)) if m else None
+
+
+def _parse_mem(text: str):
+    m = _RE_MEM.search(text)
+    if m:
+        used, total = int(m.group(1)), int(m.group(2))
+        return used, total, (100.0 * used / total if total else None)
+    return None, None, None
+
+
+def _bar_color(pct: float) -> tuple:
+    if pct < 60:
+        return (74, 222, 128)   # green
+    if pct < 85:
+        return (250, 204, 21)   # yellow
+    return (239, 68, 68)        # red
+
+
+def _draw_bar(draw, x: int, y: int, bar_w: int, h: int, pct: float, text_rgb: tuple):
+    filled = int(bar_w * min(pct, 100) / 100)
+    # track
+    draw.rounded_rectangle([x, y, x + bar_w, y + h], radius=3, fill=(30, 30, 40))
+    # fill
+    if filled > 0:
+        col = _bar_color(pct)
+        draw.rounded_rectangle([x, y, x + filled, y + h], radius=3, fill=col)
+    # percentage text right of bar
+    pct_txt = f"{pct:.0f}%"
+    draw.text((x + bar_w + 6, y - 1), pct_txt, fill=text_rgb)
+
+
+def _draw_sep(draw, y: int, w: int, color: tuple):
+    draw.line([(8, y), (w - 8, y)], fill=color, width=1)
+
+
+def _draw_border(draw, w: int, h: int, color: tuple):
+    draw.rounded_rectangle([2, 2, w - 3, h - 3], radius=6, outline=color, width=1)
 
 
 def _image_to_rgb565_le(image) -> bytes:
@@ -173,6 +231,7 @@ class TuringDriver:
         self._ser = None
         self._renderer = False
         self._last_open = 0.0
+        self._load_fonts()
 
     # -- lifecycle ------------------------------------------------------
 
@@ -267,24 +326,20 @@ class TuringDriver:
 
     # -- rendering ------------------------------------------------------
 
-    def _font(self):
-        if getattr(self, "_cached_font", None) is not None:
-            return self._cached_font
+    def _load_fonts(self) -> None:
+        self._font_header = None
+        self._font_body = None
         for cand in (
             "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
             "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
         ):
             if os.path.exists(cand):
                 try:
-                    from PIL import ImageFont
-
-                    font = ImageFont.truetype(cand, self._font_size)
-                    self._cached_font = font
-                    return font
+                    self._font_header = ImageFont.truetype(cand, FONT_SIZE_HEADER)
+                    self._font_body = ImageFont.truetype(cand, FONT_SIZE_BODY)
+                    return
                 except Exception:
                     continue
-        self._cached_font = None
-        return None
 
     def write_frame(self, lines: List[str]) -> None:
         if self._ser is None or not self._ser.is_open:
@@ -292,22 +347,114 @@ class TuringDriver:
             if self._ser is None:
                 return
         w, h = self._width, self._height
+        fh = self._font_header
+        fb = self._font_body
+        tc = self._text
+        dim = tuple(max(0, int(c * 0.55)) for c in tc)
         try:
             image = Image.new("RGB", (w, h), self._bg)
             draw = ImageDraw.Draw(image)
-            font = self._font()
-            step = self._font_size + 8
-            y = 4
-            if font is None:
-                step = 14  # tiny bitmap font
-            for line in lines[: max(1, h // step)]:
-                text = str(line)
-                if font is not None and draw.textlength(text, font=font) > w - 16:
-                    while text and draw.textlength(text + "…", font=font) > w - 16:
-                        text = text[:-1]
-                    text += "…"
-                draw.text((8, y), text, fill=self._text, font=font)
-                y += step
+
+            # border
+            _draw_border(draw, w, h, dim)
+
+            # parse lines
+            header_text = ""
+            cpu_pct = None
+            mem_used = mem_total = mem_pct = None
+            load_val = None
+            temp_val = None
+            status_text = ""
+
+            for ln in lines:
+                s = str(ln)
+                if _RE_TIME.search(s):
+                    header_text = s
+                elif _RE_STATUS.search(s):
+                    status_text = s
+                else:
+                    cpu_pct = _parse_cpu(s)
+                    mem_used, mem_total, mem_pct = _parse_mem(s)
+                    m = _RE_LOAD.search(s)
+                    if m:
+                        load_val = m.group(1)
+                    m = _RE_TEMP.search(s)
+                    if m:
+                        temp_val = m.group(1)
+
+            y = 8
+
+            # -- header line --
+            if header_text and fh:
+                draw.text((14, y), header_text, fill=dim, font=fh)
+                y += FONT_SIZE_HEADER + 10
+            elif header_text:
+                draw.text((14, y), header_text, fill=dim)
+                y += 22
+
+            # separator
+            _draw_sep(draw, y, w, dim)
+            y += 10
+
+            # -- metrics --
+            bar_x = 14
+            bar_w = w - 120
+
+            if cpu_pct is not None and fb:
+                draw.text((bar_x, y), "CPU", fill=tc, font=fb)
+                _draw_bar(draw, bar_x + 80, y + 3, bar_w - 80, 16, cpu_pct, tc)
+                y += FONT_SIZE_BODY + 8
+            elif cpu_pct is not None:
+                draw.text((bar_x, y), f"CPU  {cpu_pct}%", fill=tc)
+                y += 28
+
+            if mem_pct is not None and fb:
+                draw.text((bar_x, y), "MEM", fill=tc, font=fb)
+                _draw_bar(draw, bar_x + 80, y + 3, bar_w - 80, 16, mem_pct, tc)
+                mem_txt = f"{mem_used}M/{mem_total}M"
+                draw.text((bar_x + 80, y + 22), mem_txt, fill=dim, font=fh or fb)
+                y += FONT_SIZE_BODY + 28
+            elif mem_used is not None:
+                draw.text((bar_x, y), f"MEM  {mem_used}M/{mem_total}M", fill=tc)
+                y += 28
+
+            # load + temp on one line
+            extras = []
+            if load_val:
+                extras.append(f"LOAD {load_val}")
+            if temp_val:
+                extras.append(f"{temp_val}C")
+            if extras:
+                extra_txt = "   ".join(extras)
+                if fb:
+                    draw.text((bar_x, y), extra_txt, fill=tc, font=fb)
+                    y += FONT_SIZE_BODY + 6
+                else:
+                    draw.text((bar_x, y), extra_txt, fill=tc)
+                    y += 26
+
+            # separator
+            _draw_sep(draw, y, w, dim)
+            y += 10
+
+            # -- status line --
+            if status_text:
+                st = _RE_STATUS.search(status_text)
+                st_body = st.group(1).strip() if st else status_text
+                if "bereit" in st_body:
+                    sc = (74, 222, 128)
+                elif "idle" in st_body:
+                    sc = dim
+                elif "denkt" in st_body or "schreibt" in st_body:
+                    sc = (250, 204, 21)
+                else:
+                    sc = (34, 211, 238)
+                dot = "\u25cf "
+                if fb:
+                    draw.text((14, y), dot, fill=sc, font=fb)
+                    draw.text((14 + int(fb.size * 0.7), y), st_body, fill=sc, font=fb)
+                else:
+                    draw.text((14, y), dot + st_body, fill=sc)
 
             rgb565 = _image_to_rgb565_le(image)
             x1, y1 = w - 1, h - 1
