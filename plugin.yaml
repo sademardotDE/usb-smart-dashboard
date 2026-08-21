@@ -1,0 +1,18 @@
+name: usb-smart-dashboard
+version: 0.2.0
+description: "Renders live system stats and Hermes agent status on a USB smart display. Runs via plugin hooks and a background render thread — no agent action required."
+author: "@LVT382009"
+provides_tools:
+  - usb_display_message
+provides_hooks:
+  - on_session_start
+  - on_session_end
+  - post_tool_call
+  - on_stream_start
+  - on_stream_end
+hooks:
+  - on_session_start
+  - on_session_end
+  - post_tool_call
+  - on_stream_start
+  - on_stream_end
