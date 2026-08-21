@@ -290,7 +290,9 @@
       h(components.CardHeader, null,
         h(components.CardTitle, null, "Settings"),
         h("p", { style: { fontSize: "0.85rem", color: "var(--muted-foreground, #888)" } },
-          "Turing Smart Screen 3.5\" status display — driver settings.")
+          "Turing Smart Screen 3.5\" status display — driver settings."),
+        h("p", { style: { fontSize: "0.75rem", color: "var(--muted-foreground, #888)", marginTop: "0.25rem" } },
+          "Hinweis: Änderungen werden nach Hermes-Neustart aktiv (Gateway/Dashboard neu starten).")
       ),
       h(components.CardContent, null,
         h("div", { className: "usb-fields" },
