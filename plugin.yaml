@@ -18,3 +18,40 @@ hooks:
   - post_tool_call
   - on_stream_start
   - on_stream_end
+
+config_schema:
+  enabled:
+    type: boolean
+    default: true
+    description: "Master-Schalter für den Display-Treiber"
+  driver:
+    type: select
+    default: "turing"
+    options: ["turing", "serial", "file", "auto"]
+    description: "Display-Treiber-Backend"
+  port:
+    type: string
+    default: ""
+    description: "Serieller Port (z. B. /dev/ttyACM0), leer = Autodetect"
+  baudrate:
+    type: number
+    default: 115200
+    description: "Serielle Baudrate"
+  brightness:
+    type: number
+    default: 25
+    minimum: 0
+    maximum: 100
+    description: "Hintergrundbeleuchtung (0-100)"
+  display_width:
+    type: number
+    default: 480
+    description: "Panel-Breite in Pixel (Landscape)"
+  display_height:
+    type: number
+    default: 320
+    description: "Panel-Höhe in Pixel (Landscape)"
+  font_size:
+    type: number
+    default: 28
+    description: "Schriftgröße für Textzeilen"
