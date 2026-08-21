@@ -4,5 +4,7 @@
   "description": "Turing Smart Screen 3.5\" Statusanzeige",
   "icon": "Monitor",
   "version": "0.2.0",
+  "tab": { "path": "/usb-smart-dashboard", "position": "end" },
+  "entry": "dist/index.js",
   "api": "plugin_api.py"
 }
