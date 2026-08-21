@@ -25,7 +25,7 @@ config_schema:
     default: true
     description: "Master-Schalter für den Display-Treiber"
   driver:
-    type: select
+    type: string
     default: "turing"
     options: ["turing", "serial", "file", "auto"]
     description: "Display-Treiber-Backend"

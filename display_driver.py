@@ -210,6 +210,9 @@ def build_driver(config_get, hermes_home: Path) -> DisplayDriver:
         return FileDriver(log_dir)
 
     if driver_name == "turing":
+        # Relative import: the loader registers this package under an
+        # alias (hermes_plugins.usb_smart_dashboard), so the absolute
+        # name "usb_smart_dashboard" does not exist at runtime.
         from .turing_driver import build_turing_driver
 
         return build_turing_driver(config_get)
