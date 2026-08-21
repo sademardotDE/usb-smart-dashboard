@@ -29,6 +29,13 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+try:  # exclusive device lock — only one Hermes process renders at a time
+    import fcntl
+
+    _HAS_FCNTL = True
+except ImportError:  # pragma: no cover - non-POSIX
+    _HAS_FCNTL = False
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -143,6 +150,7 @@ class TuringDriver:
         self._height = display_height
         self._font_size = font_size
         self._ser = None
+        self._renderer = False
         self._last_open = 0.0
 
     # -- lifecycle ------------------------------------------------------
@@ -167,6 +175,31 @@ class TuringDriver:
         except SerialException as exc:
             logger.warning("usb-turing: cannot open %s: %s", self._port, exc)
             return False
+
+        # Cross-process exclusivity: several Hermes processes (gateway,
+        # dashboard, serve) all load this plugin and would otherwise write
+        # the same panel in parallel, tearing the framebuffer into stripes
+        # and fragments. Take an advisory flock on the device fd — only the
+        # process that wins the lock opens/renders; the others back off and
+        # retry later. When the renderer exits its fd closes and the lock
+        # is released, so the next contender takes over automatically.
+        if _HAS_FCNTL:
+            try:
+                fcntl.flock(ser.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self._renderer = True
+            except OSError:
+                logger.info(
+                    "usb-turing: %s already locked by another Hermes process — "
+                    "not rendering",
+                    self._port,
+                )
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                return False
+        else:  # pragma: no cover - non-POSIX fallback
+            self._renderer = True
 
         self._ser = ser  # helpers below write through self._ser
 

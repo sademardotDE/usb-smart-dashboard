@@ -1,11 +1,10 @@
 (function () {
   "use strict";
 
-  // USB Smart Dashboard — dashboard config panel.
-  //
+  // USB Smart Dashboard — dashboard panel.
   // Plain IIFE, no build step. Uses window.__HERMES_PLUGIN_SDK__ for React
-  // and shadcn primitives, and talks to the plugin's backend config API at
-  // /api/plugins/usb-smart-dashboard/config (GET/PUT).
+  // and shadcn primitives, and talks to the plugin's backend API at
+  // /api/plugins/usb-smart-dashboard/ (config GET/PUT + live status GET).
 
   var SDK = window.__HERMES_PLUGIN_SDK__;
   if (!SDK || !window.__HERMES_PLUGINS__) return;
@@ -18,15 +17,10 @@
   var useState = hooks.useState || React.useState;
   var useEffect = hooks.useEffect || React.useEffect;
 
-  // Toast feedback. Older hosts may not expose the hook yet — fall back to a
-  // no-op so the bundle still renders.
   var useToast = hooks.useToast || function () {
     return { showToast: function () {}, toast: null };
   };
 
-  // Newer hosts expose a DS-styled Checkbox. Fall back to a native
-  // <input type="checkbox"> shim so older hosts still render, normalising
-  // Radix's onCheckedChange(checked) signature to native onChange(event).
   var Checkbox = components.Checkbox || function (props) {
     return h("input", {
       type: "checkbox",
@@ -41,8 +35,6 @@
 
   var API_BASE = "/api/plugins/usb-smart-dashboard";
 
-  // Defaults — merged under whatever the backend returns so newly added
-  // schema keys are always present and the UI never crashes on a missing field.
   var DEFAULTS = {
     enabled: true,
     driver: "turing",
@@ -56,7 +48,6 @@
 
   var DRIVER_OPTIONS = ["turing", "serial", "file", "auto"];
 
-  // Field metadata — drives the generic ConfigField renderer below.
   var FIELDS = [
     { key: "enabled", label: "Enabled", type: "checkbox" },
     { key: "driver", label: "Driver", type: "select", options: DRIVER_OPTIONS },
@@ -71,9 +62,6 @@
     { key: "font_size", label: "Font size (px)", type: "number" },
   ];
 
-  // The SDK Select fires onValueChange(value) directly (shadcn popup, not a
-  // native <select>). Older code calls onChange({target:{value}}). Wire both
-  // signatures so the setter works with either API.
   function selectChangeHandler(onChange) {
     return {
       onValueChange: function (v) { onChange(v == null ? "" : v); },
@@ -147,7 +135,79 @@
     );
   }
 
-  function UsbSmartDashboardPage() {
+  // Small gauge-ish stat row: label + value (+ a simple bar for percentage).
+  function StatRow(props) {
+    var label = props.label;
+    var value = props.value;
+    var pct = props.pct;
+    var barColor = props.color || "var(--accent, #4ade80)";
+    if (value == null) value = "—";
+    var bar = null;
+    if (pct != null) {
+      var clamped = Math.max(0, Math.min(100, pct));
+      bar = h("div", { style: { background: "var(--muted, #1f2937)", borderRadius: "4px", height: "6px", width: "100%", marginTop: "4px" } },
+        h("div", { style: { background: barColor, borderRadius: "4px", height: "6px", width: clamped + "%" } })
+      );
+    }
+    return h("div", { style: { marginBottom: "0.75rem" } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.85rem" } },
+        h("span", { style: { color: "var(--muted-foreground, #888)" } }, label),
+        h("span", { style: { fontVariantNumeric: "tabular-nums" } }, value)
+      ),
+      bar
+    );
+  }
+
+  function StatusPanel() {
+    var statusState = useState(null);
+    var status = statusState[0];
+    var setStatus = statusState[1];
+    var errState = useState(null);
+    var err = errState[0];
+    var setErr = errState[1];
+
+    useEffect(function () {
+      var alive = true;
+      function poll() {
+        SDK.fetchJSON(API_BASE + "/status")
+          .then(function (data) {
+            if (!alive) return;
+            setStatus(data);
+            setErr(null);
+          })
+          .catch(function (e) {
+            if (!alive) return;
+            setErr(e && e.message ? e.message : String(e));
+          });
+      }
+      poll();
+      var iv = setInterval(poll, 2000);
+      return function () { alive = false; clearInterval(iv); };
+    }, []);
+
+    return h(components.Card, null,
+      h(components.CardHeader, null,
+        h(components.CardTitle, null, "System Status"),
+        status && status.host
+          ? h("p", { style: { fontSize: "0.8rem", color: "var(--muted-foreground, #888)" } },
+              status.host + (status.time ? "  ·  " + status.time : ""))
+          : null
+      ),
+      h(components.CardContent, null,
+        err ? h("p", { style: { color: "var(--destructive, #ef4444)" } }, "Status unavailable: " + err)
+        : !status ? h("p", { style: { color: "var(--muted-foreground, #888)" } }, "Loading…")
+        : h("div", null,
+            h(StatRow, { label: "CPU", value: status.cpu, pct: parseFloat(String(status.cpu).replace("%", "")) || null, color: "var(--accent, #4ade80)" }),
+            h(StatRow, { label: "Memory", value: status.mem, pct: status.mem_pct, color: "var(--accent, #4ade80)" }),
+            h(StatRow, { label: "Load", value: status.load }),
+            h(StatRow, { label: "Thermal", value: status.temp }),
+            h(StatRow, { label: "Uptime", value: status.uptime })
+          )
+      )
+    );
+  }
+
+  function SettingsPanel() {
     var toastApi = useToast();
     var showToast = toastApi.showToast;
 
@@ -185,16 +245,17 @@
 
     if (error) {
       return h(components.Card, null,
-        h(components.CardHeader, null,
-          h(components.CardTitle, null, "USB Smart Dashboard")),
+        h(components.CardHeader, null, h(components.CardTitle, null, "Settings")),
         h(components.CardContent, null,
-          h("p", { style: { color: "var(--destructive, #ef4444)" } },
-            "Failed to load config: " + error)),
+          h("p", { style: { color: "var(--destructive, #ef4444)" } }, "Failed to load config: " + error))
       );
     }
 
     if (!config || !draft) {
-      return h("div", { className: "usb-loading" }, "Loading…");
+      return h(components.Card, null,
+        h(components.CardHeader, null, h(components.CardTitle, null, "Settings")),
+        h(components.CardContent, null, h("p", null, "Loading…"))
+      );
     }
 
     function setField(key, value) {
@@ -227,11 +288,9 @@
 
     return h(components.Card, null,
       h(components.CardHeader, null,
-        h(components.CardTitle, null, "USB Smart Dashboard"),
-        h("p", {
-          className: "usb-desc",
-          style: { fontSize: "0.85rem", color: "var(--muted-foreground, #888)" },
-        }, "Turing Smart Screen 3.5\" status display — driver settings."),
+        h(components.CardTitle, null, "Settings"),
+        h("p", { style: { fontSize: "0.85rem", color: "var(--muted-foreground, #888)" } },
+          "Turing Smart Screen 3.5\" status display — driver settings.")
       ),
       h(components.CardContent, null,
         h("div", { className: "usb-fields" },
@@ -256,6 +315,13 @@
           }, "Unsaved changes") : null,
         ),
       ),
+    );
+  }
+
+  function UsbSmartDashboardPage() {
+    return h("div", { className: "usb-page", style: { display: "flex", flexDirection: "column", gap: "1rem" } },
+      h(StatusPanel),
+      h(SettingsPanel)
     );
   }
 
