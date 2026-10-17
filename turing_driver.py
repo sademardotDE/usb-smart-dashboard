@@ -285,9 +285,19 @@ class TuringDriver:
 
         # HELLO handshake -> detect sub-revision (3.5" UsbMonitor)
         try:
+            # Opening the CDC ACM port asserts DTR/RTS, which resets the
+            # CH343 and with it the panel. Send HELLO too early and it is
+            # swallowed by the rebooting firmware -> ack timeout -> wrong
+            # (portrait) orientation and lost first frames. Wait for the
+            # reboot, then retry the handshake once if the ack is missing.
+            time.sleep(2.5)
             ser.reset_input_buffer()
             ser.write(_HELLO)
             resp = ser.read(6)
+            if resp != _ACK_USBMONITOR_3_5:
+                ser.reset_input_buffer()
+                ser.write(_HELLO)
+                resp = ser.read(6)
             ser.reset_input_buffer()
             width, height = self._width, self._height
             if resp == _ACK_USBMONITOR_3_5:
