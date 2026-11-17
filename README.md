@@ -19,7 +19,8 @@ pyserial, pluggable driver layer, zero core changes.
   `show-image.json` with `created`/`duration`/`source`); the active renderer
   (gateway thread **or** standalone daemon) shows it scaled to fit for the
   requested time, then returns to the live frame. Used by `iwfcam4hermes` to
-  show the motion snapshot.
+  show the motion snapshot. Contract/examples/troubleshooting:
+  [`docs/IMAGE_BRIDGE.md`](docs/IMAGE_BRIDGE.md).
 
 ## Install / layout
 
@@ -98,6 +99,15 @@ Protocol reference: [mathoudebine/turing-smart-screen-python](https://github.com
 
 Wild guess display text drivers (`serial`+, `clear_sequence`) are **not**
 supported by this panel; use `turing` or `file`.
+
+## Integrationen
+
+- **iwfcam4hermes** (≥ 0.18.0): zeigt Bewegungs-Snapshots auf dem Display
+  (`relay_motion_display=true`, `relay_motion_display_duration`), Status/Test
+  über `camera_display` bzw. `GET/POST /display`. Erkennt dieses Plugin über
+  Manifest + `plugins.enabled` und `/dev/ttyACM*`.
+- Eigene Plugins: JPEG + Meta in die Inbox schreiben, siehe
+  [`docs/IMAGE_BRIDGE.md`](docs/IMAGE_BRIDGE.md).
 
 ## Notes
 
