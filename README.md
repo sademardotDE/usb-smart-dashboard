@@ -14,6 +14,12 @@ pyserial, pluggable driver layer, zero core changes.
   - `on_stream_start` / `on_stream_end` → "hermes: schreibt …" while streaming
 - **Tool** `usb_display_message` lets the agent push a one-shot message
   onto the display (for N seconds), then it returns to the live frame.
+- **Image bridge (v0.5.0):** other plugins can publish a JPEG to
+  `~/.hermes/usb-smart-dashboard/show-image.jpg` (metadata
+  `show-image.json` with `created`/`duration`/`source`); the active renderer
+  (gateway thread **or** standalone daemon) shows it scaled to fit for the
+  requested time, then returns to the live frame. Used by `iwfcam4hermes` to
+  show the motion snapshot.
 
 ## Install / layout
 

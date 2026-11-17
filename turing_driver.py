@@ -466,16 +466,52 @@ class TuringDriver:
                 else:
                     draw.text((14, y), dot + st_body, fill=sc)
 
-            rgb565 = _image_to_rgb565_le(image)
-            x1, y1 = w - 1, h - 1
-            _send_command(self._ser, _DISPLAY_BITMAP, 0, 0, x1, y1)
-            for off in range(0, len(rgb565), w * 8):
-                self._ser.write(rgb565[off: off + w * 8])
-            self._ser.flush()
+            self._send_bitmap(image)
         except (SerialException, OSError) as exc:
             logger.warning("usb-turing: frame write failed (%s); reconnecting", exc)
             self.close()
             self._reconnect()
+
+    def write_image(self, image) -> None:
+        """Show an arbitrary PIL image (or JPEG/PNG bytes) on the panel.
+
+        Scaled to fit (aspect ratio preserved) and centered on the configured
+        background. Useful for snapshots / motion frames from other plugins.
+        """
+        if self._ser is None or not self._ser.is_open:
+            self._reconnect()
+            if self._ser is None:
+                return
+        try:
+            if isinstance(image, (bytes, bytearray, memoryview)):
+                import io
+
+                image = Image.open(io.BytesIO(bytes(image)))
+            img = image.convert("RGB")
+            img.thumbnail((self._width, self._height))
+            frame = Image.new("RGB", (self._width, self._height), self._bg)
+            frame.paste(img, ((self._width - img.width) // 2,
+                              (self._height - img.height) // 2))
+            self._send_bitmap(frame)
+        except (SerialException, OSError, ValueError) as exc:
+            logger.warning("usb-turing: image write failed (%s); reconnecting", exc)
+            self.close()
+            self._reconnect()
+
+    def _send_bitmap(self, image) -> None:
+        """Push a full-size PIL image as one RGB565 bitmap frame."""
+        w, h = self._width, self._height
+        if image.size != (w, h):
+            resized = Image.new("RGB", (w, h), self._bg)
+            copy = image.convert("RGB")
+            copy.thumbnail((w, h))
+            resized.paste(copy, ((w - copy.width) // 2, (h - copy.height) // 2))
+            image = resized
+        rgb565 = _image_to_rgb565_le(image)
+        _send_command(self._ser, _DISPLAY_BITMAP, 0, 0, w - 1, h - 1)
+        for off in range(0, len(rgb565), w * 8):
+            self._ser.write(rgb565[off: off + w * 8])
+        self._ser.flush()
 
     # -- maintenance ----------------------------------------------------
 

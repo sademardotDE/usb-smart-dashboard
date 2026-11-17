@@ -1,6 +1,6 @@
 name: usb-smart-dashboard
-version: 0.4.0
-description: "Renders live system stats and Hermes agent status on a USB smart display. Runs via plugin hooks and a background render thread — no agent action required."
+version: 0.5.0
+description: "Renders live system stats, Hermes agent status and images (e.g. motion snapshots) on a USB smart display."
 author: "@LVT382009"
 repository: "https://github.com/sademardotDE/usb-smart-dashboard"
 homepage: "https://github.com/sademardotDE/usb-smart-dashboard"

@@ -30,7 +30,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import display_driver, state as state_mod
+from . import display_driver, imagebridge, state as state_mod
 from .tools import (
     USBDISPLAY_MESSAGE_SCHEMA,
     _check_usb_display_available,
@@ -115,8 +115,27 @@ def _build_frame(snap: "state_mod.DisplayState", stats: dict) -> list[str]:
 
 def _render_loop(state: "state_mod.DisplayState", driver: "display_driver.DisplayDriver") -> None:
     ticks = 0
+    last_image_key = None
     while not _STOP.wait(TICK_SECONDS):
         ticks += 1
+        # Von anderen Plugins veröffentlichtes Bild (z. B. Bewegungs-Snapshot)?
+        active_image = imagebridge.active()
+        if active_image:
+            if active_image["key"] != last_image_key:
+                try:
+                    from PIL import Image
+
+                    driver.write_image(Image.open(active_image["path"]))
+                    logger.info(
+                        "usb-display: image shown (source=%s, %.0fs)",
+                        active_image.get("source") or "?", active_image.get("remaining") or 0,
+                    )
+                    last_image_key = active_image["key"]
+                except Exception as exc:  # noqa: BLE001 - Anzeige darf nie crashen
+                    logger.warning("usb-display: image render failed: %s", exc)
+                    last_image_key = active_image["key"]
+            continue
+        last_image_key = None
         if ticks % RECONNECT_EVERY == 0 and not state.driver_available:
             state.driver_available = driver.open()
             if state.driver_available:

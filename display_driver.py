@@ -59,6 +59,10 @@ class DisplayDriver:
         """Render one frame as a list of display rows."""
         raise NotImplementedError
 
+    def write_image(self, image) -> None:
+        """Show an image (PIL image or JPEG/PNG bytes). Default: log only."""
+        logger.info("usb-display: image frame requested (driver %s has no image support)", self.name)
+
     def close(self) -> None:
         pass
 
@@ -106,6 +110,26 @@ class FileDriver(DisplayDriver):
             self._trim()
         except OSError as exc:
             logger.warning("usb-display file driver write failed: %s", exc)
+
+    def write_image(self, image) -> None:
+        """Persist the image for debugging (driver=file)."""
+        import time as _time
+
+        folder = self._log_dir / "images"
+        folder.mkdir(parents=True, exist_ok=True)
+        suffix = ".jpg"
+        data = image
+        if not isinstance(image, (bytes, bytearray)):
+            suffix = ".png"
+            try:
+                import io
+
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                data = buffer.getvalue()
+            except Exception:
+                return
+        (folder / f"frame-{_time.strftime('%Y%m%d-%H%M%S')}{suffix}").write_bytes(bytes(data))
 
     def _trim(self) -> None:
         try:

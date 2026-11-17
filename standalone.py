@@ -27,6 +27,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from turing_driver import TuringDriver  # noqa: E402
+import imagebridge  # noqa: E402
+
+try:
+    from PIL import Image  # noqa: E402
+except ImportError:  # pragma: no cover
+    Image = None
 
 logger = logging.getLogger("usb-smart-dashboard.standalone")
 
@@ -188,6 +194,7 @@ def main() -> int:
     read_cpu_pct()
 
     opened = False
+    last_image_key = None
     logger.info("daemon starting (refresh every %.1fs)", REFRESH_SECONDS)
     while _running:
         if not opened:
@@ -197,6 +204,22 @@ def main() -> int:
                 time.sleep(5)
                 continue
             logger.info("display open")
+        active_image = imagebridge.active()
+        if active_image:
+            if Image is not None and active_image["key"] != last_image_key:
+                try:
+                    driver.write_image(Image.open(active_image["path"]))
+                    logger.info("showing image from %s (%.0fs)",
+                                active_image.get("source") or "?", active_image.get("remaining") or 0)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("image render failed: %s", exc)
+                last_image_key = active_image["key"]
+            if active_image:
+                end = time.monotonic() + REFRESH_SECONDS
+                while _running and time.monotonic() < end:
+                    time.sleep(0.1)
+                continue
+        last_image_key = None
         driver.write_frame(build_lines())
         # write_frame self-heals transient serial errors; if it closed the
         # port for good, reopen on the next iteration.
